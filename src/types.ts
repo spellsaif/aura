@@ -33,7 +33,7 @@ export interface SendOptions {
     // Commitment level to wait for. Default - "confirmed"
     commitment?: Commitment,
     // Skip simulation before sending. Default - false
-    skipPreFlight?: boolean
+    skipPreflight?: boolean
 }
 
 export interface LatestBlockhash {
