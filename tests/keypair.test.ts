@@ -6,6 +6,7 @@ import {
   toBase58,
   loadKeyFile,
   saveKeyFile,
+  generateExtractableKey,
 } from "../src/keypair.js"
 import { KeypairLoadError } from "../src/errors.js"
 import { tmpdir } from "node:os"
@@ -42,7 +43,7 @@ describe("generateKey", () => {
 describe("toBase58 and loadKey", () => {
   it("round-trips: export then import restores same address", async () => {
     // Generate a fresh keypair
-    const original = await generateKey()
+    const original = await generateExtractableKey()
 
     // Export the private key to base58
     const secret = await toBase58(original)
@@ -92,31 +93,30 @@ describe("loadKey", () => {
 
 describe("keyFromBytes", () => {
   it("round-trips with a generated keypair", async () => {
-    // Generate a key and extract its raw bytes
-    const original = await generateKey()
+    const original = await generateExtractableKey()
 
-    const privateBytes = await crypto.subtle.exportKey(
-      "raw",
+    // Export private key bytes via pkcs8 (kit 6.x Ed25519 format)
+    const pkcs8 = await crypto.subtle.exportKey(
+      "pkcs8",
       original.keyPair.privateKey,
     )
+    const privateBytes = new Uint8Array(pkcs8, pkcs8.byteLength - 32, 32)
+
     const publicBytes = await crypto.subtle.exportKey(
       "raw",
       original.keyPair.publicKey,
     )
 
-    // Combine into 64-byte array (Solana CLI format)
     const combined = new Uint8Array(64)
-    combined.set(new Uint8Array(privateBytes), 0)
+    combined.set(privateBytes, 0)
     combined.set(new Uint8Array(publicBytes), 32)
 
-    // Load back from bytes
     const restored = await keyFromBytes(combined)
-
     expect(restored.address).toBe(original.address)
   })
 
   it("throws KeypairLoadError for bytes that are too short", async () => {
-    const badBytes = new Uint8Array(10) // needs 64
+    const badBytes = new Uint8Array(10)
     await expect(keyFromBytes(badBytes)).rejects.toThrow(KeypairLoadError)
   })
 })
