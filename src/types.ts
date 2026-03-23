@@ -48,7 +48,7 @@ export interface MintTokenOptions {
     mint?: TransactionSigner
 }
 
-export interface TransforTokenOptions {
+export interface TransferTokenOptions {
     mint: Address,
     from: TransactionSigner,
     to: Address,
