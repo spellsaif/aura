@@ -1,6 +1,12 @@
 {
-  "name": "aura",
+  "name": "aura-sol",
   "version": "0.1.0",
+  "keywords": [ "solana", "blockchain", "web3", "typescript",
+  "spl-token", "transaction", "aura"],
+  "author": "nanasi saif.ali067@gmail.com",
+  "license": "MIT",
+  "type": "module",
+  "description": "Solana Typescript Library",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -39,10 +45,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "keywords": [],
-  "author": "nanasi",
-  "license": "MIT",
-  "type": "module",
-  "description": "Solana Typescript Library"
+  }
 }
