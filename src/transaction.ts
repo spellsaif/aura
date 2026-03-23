@@ -8,11 +8,14 @@ import {
   signTransactionMessageWithSigners,
   compileTransaction,
   getBase64EncodedWireTransaction,
+  getSignatureFromTransaction,
+  sendAndConfirmTransactionFactory,
+  assertIsTransactionWithBlockhashLifetime,
 } from "@solana/kit"
 import type {
-  IInstruction,
   TransactionSigner,
   TransactionMessageWithBlockhashLifetime,
+  Instruction,
 } from "@solana/kit"
 import {
   getSetComputeUnitLimitInstruction,
@@ -22,7 +25,7 @@ import { SimulationError, BlockhashExpiredError } from "./errors.js"
 import { parseSimulationLogs, sleep } from "./utils.js"
 import type { LatestBlockhash, SendOptions, SendResult } from "./types.js"
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+//  Constants 
 
 // Add 10% on top of simulated CU usage as a safety buffer.
 // Why 10%? Programs can use slightly more CUs on mainnet than
@@ -35,24 +38,20 @@ const COMPUTE_UNIT_BUFFER = 1.1
 // Complex transactions (multiple instructions, large programs) need more.
 const DEFAULT_COMPUTE_UNIT_LIMIT = 200_000
 
-// ─── State ────────────────────────────────────────────────────────────────────
+// State 
 
 // This is the internal state of a TxBuilder.
 // We keep it separate from the class so it's clear what data the builder holds.
 interface TxBuilderState {
   feePayer: TransactionSigner
-  instructions: IInstruction[]
-  computeUnitLimit?: number    // undefined = auto-simulate
-  computeUnitPrice?: bigint   // undefined = no priority fee
-  latestBlockhash?: LatestBlockhash  // undefined = auto-fetch
-  // These are injected by LamportClient — the builder needs the
-  // RPC connection to simulate and send
+  instructions: Instruction[]                    
+  computeUnitLimit: number | undefined           
+  computeUnitPrice: bigint | undefined           
+  latestBlockhash: LatestBlockhash | undefined   
   rpc: RpcConnection
   rpcSubscriptions: RpcSubscriptionsConnection
 }
 
-// Kit's RPC types are complex generics. We use these aliases
-// to avoid repeating them everywhere.
 type RpcConnection = ReturnType<typeof import("@solana/kit").createSolanaRpc>
 type RpcSubscriptionsConnection = ReturnType<typeof import("@solana/kit").createSolanaRpcSubscriptions>
 
@@ -99,10 +98,6 @@ export class TxBuilder {
    *
    * What is a priority fee? Validators process transactions in order
    * of fee per CU. During congestion, paying more = landing faster.
-   * 0 = no priority (fine during normal times)
-   * 1000 = low priority
-   * 10_000 = medium priority
-   * 100_000+ = high priority (expensive but reliable during congestion)
    *
    * @example
    * client.buildTx({...}).withPriorityFee(1000n).send()
@@ -119,7 +114,7 @@ export class TxBuilder {
    *   .withInstructions([memoIx, referenceIx])
    *   .send()
    */
-  withInstructions(instructions: IInstruction[]): TxBuilder {
+   withInstructions(instructions: Instruction[]): TxBuilder {
     return new TxBuilder({
       ...this.state,
       instructions: [...this.state.instructions, ...instructions],
@@ -231,126 +226,81 @@ export class TxBuilder {
    */
   async send(options: SendOptions = {}): Promise<SendResult> {
     const {
-      maxRetries = 3,
-      commitment = "confirmed",
+      maxRetries    = 3,
+      commitment    = "confirmed",
       skipPreflight = false,
     } = options
 
+    const { rpc, rpcSubscriptions } = this.state
+
+    // Create the sendAndConfirm function once — reused across retries
+    // This is the new API replacing rpc.confirmTransaction()
+    const sendAndConfirmTransaction = sendAndConfirmTransactionFactory({
+  rpc: rpc as Parameters<typeof sendAndConfirmTransactionFactory>[0]["rpc"],
+  rpcSubscriptions: rpcSubscriptions as Parameters<typeof sendAndConfirmTransactionFactory>[0]["rpcSubscriptions"],
+})
+
     let retries = 0
 
-    // Retry loop — runs until success or maxRetries exhausted
     while (retries <= maxRetries) {
-      // Always fetch a fresh blockhash on each attempt
-      // A failed attempt means the old blockhash may be stale
-      const { rpc } = this.state
       const { value: latestBlockhash } = await rpc
         .getLatestBlockhash({ commitment: "confirmed" })
         .send()
 
-      // Auto compute budget
-      // If the caller didn't set a manual limit, simulate to measure CUs
       let computeUnitLimit = this.state.computeUnitLimit
 
       if (computeUnitLimit === undefined && !skipPreflight) {
-        // simulate() throws SimulationError if the tx will fail
-        // We let that propagate — no point retrying a tx that will fail
         const sim = await this.simulate()
-
-        // Add 10% buffer on top of measured usage
-        // Math.ceil rounds up to avoid setting a fractional CU limit
         computeUnitLimit = Math.ceil(sim.unitsConsumed * COMPUTE_UNIT_BUFFER)
       }
 
-      // ── Build, sign, compile ────────────────────────────────────────────────
       const message = await this._buildMessage(latestBlockhash, computeUnitLimit)
+      const signed  = await signTransactionMessageWithSigners(message)
 
-      // signTransactionMessageWithSigners looks at all accounts in the
-      // message that are marked as signers and calls their sign functions
-      // This is why you pass TransactionSigner not just an Address for feePayer
-      const signed = await signTransactionMessageWithSigners(message)
+      assertIsTransactionWithBlockhashLifetime(signed)
 
-      // compileTransaction serializes the message into binary wire format
-      // getBase64EncodedWireTransaction base64-encodes it for the RPC
-      const encoded = getBase64EncodedWireTransaction(
-        compileTransaction(signed),
-      )
+      const signature = getSignatureFromTransaction(signed)
 
-    
       try {
-        const signature = await rpc
-          .sendTransaction(
-            encoded as Parameters<typeof rpc.sendTransaction>[0],
-            {
-              encoding: "base64",
-              skipPreflight,
-              preflightCommitment: commitment,
-              // maxRetries: 0 — we handle retries ourselves
-              // If we let the RPC retry, it reuses the same blockhash
-              // which will eventually expire. We retry with a fresh blockhash.
-              maxRetries: 0n,
-            },
-          )
+        // sendAndConfirmTransaction handles encoding, sending, and confirming
+        // It uses WebSocket subscriptions internally for efficient confirmation
+        await sendAndConfirmTransaction(signed, { commitment })
+
+        // Get the slot from the RPC after confirmation
+        const sigStatus = await rpc
+          .getSignatureStatuses([signature])
           .send()
 
-        // Wait for the validator network to confirm the transaction
-        // confirmTransaction subscribes via WebSocket and waits for
-        // the specified commitment level
-        const confirmResult = await rpc
-          .confirmTransaction(
-            {
-              signature,
-              blockhash: latestBlockhash.blockhash,
-              lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-            } as Parameters<typeof rpc.confirmTransaction>[0],
-            { commitment },
-          )
-          .send()
+        const slot = sigStatus.value[0]?.slot ?? 0n
 
-        const slot = confirmResult.context.slot
-
-        // Success — return the typed result
         return {
-          signature: signature as SendResult["signature"],
+          signature,
           slot,
           retries,
           commitment,
         }
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e)
+        const msg = e instanceof Error ? e.message : String(e)
 
-        // ── Blockhash expiry ──────────────────────────────────────────────────
-        // This is the most common transient failure.
-        // The blockhash is only valid for ~60 seconds.
-        // We catch it, increment retries, and loop with a fresh blockhash.
         if (
-          message.includes("BlockhashNotFound") ||
-          message.includes("block height exceeded") ||
-          message.includes("Blockhash not found")
+          msg.includes("BlockhashNotFound") ||
+          msg.includes("block height exceeded") ||
+          msg.includes("Blockhash not found")
         ) {
           if (retries < maxRetries) {
             retries++
-            // Exponential backoff — wait longer between each retry
-            // Retry 1: 500ms, Retry 2: 1000ms, Retry 3: 1500ms
             await sleep(500 * retries)
-            continue // back to top of while loop
+            continue
           }
-
-          // All retries exhausted — throw our typed error
           throw new BlockhashExpiredError({ cause: e })
         }
 
-        // Any other error — surface it directly
-        // Don't wrap unknown errors — we don't know what they are
         throw e
       }
     }
 
-    // Should never reach here — the loop either returns or throws
-    // But TypeScript needs this for exhaustiveness
     throw new BlockhashExpiredError()
   }
-
-  // ─── Internal ───────────────────────────────────────────────────────────────
 
   /**
    * Build the transaction message using kit's pipe() pattern.
@@ -367,33 +317,18 @@ export class TxBuilder {
    */
   private async _buildMessage(
     blockhash: { blockhash: string; lastValidBlockHeight: bigint },
-    computeUnitLimit?: number,
+    computeUnitLimit: number | undefined,
   ) {
     const { feePayer, instructions, computeUnitPrice } = this.state
 
     return pipe(
-      // Step 1: create empty transaction message
-      // "legacy" version works for most transactions
-      // version 0 is needed for Address Lookup Tables (advanced)
       createTransactionMessage({ version: "legacy" }),
-
-      // Step 2: set who pays the transaction fee
-      // setTransactionMessageFeePayerSigner uses the signer's .address
-      // and marks it as a required signer in the message
       (tx) => setTransactionMessageFeePayerSigner(feePayer, tx),
-
-      // Step 3: set the blockhash lifetime
-      // This embeds the blockhash into the message AND records
-      // lastValidBlockHeight so kit can detect expiry
       (tx) =>
         setTransactionMessageLifetimeUsingBlockhash(
           blockhash as TransactionMessageWithBlockhashLifetime["lifetimeConstraint"],
           tx,
         ),
-
-      // Step 4: prepend compute unit limit instruction (if set)
-      // This MUST come before your actual instructions
-      // The compute budget program reads this to set the CU cap
       (tx) => {
         if (computeUnitLimit !== undefined) {
           return appendTransactionMessageInstruction(
@@ -403,23 +338,15 @@ export class TxBuilder {
         }
         return tx
       },
-
-      // Step 5: prepend priority fee instruction (if set)
-      // Also goes before your actual instructions
       (tx) => {
         if (computeUnitPrice !== undefined) {
           return appendTransactionMessageInstruction(
-            getSetComputeUnitPriceInstruction({
-              microLamports: computeUnitPrice,
-            }),
+            getSetComputeUnitPriceInstruction({ microLamports: computeUnitPrice }),
             tx,
           )
         }
         return tx
       },
-
-      // Step 6: append your actual instructions
-      // These come after the compute budget instructions
       (tx) => appendTransactionMessageInstructions(instructions, tx),
     )
   }
