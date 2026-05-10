@@ -1,8 +1,15 @@
 {
   "name": "aura-sol",
-  "version": "0.1.0",
-  "keywords": [ "solana", "blockchain", "web3", "typescript",
-  "spl-token", "transaction", "aura"],
+  "version": "0.1.1",
+  "keywords": [
+    "solana",
+    "blockchain",
+    "web3",
+    "typescript",
+    "spl-token",
+    "transaction",
+    "aura"
+  ],
   "author": "nanasi saif.ali067@gmail.com",
   "license": "MIT",
   "type": "module",
@@ -11,13 +18,15 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    "." : {
+    ".": {
       "import": "./dist/index.js",
       "require": "./dist/index.cjs",
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -25,16 +34,16 @@
     "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit"
   },
-
   "peerDependencies": {
     "@solana/kit": "^6.5.0"
   },
   "dependencies": {
+    "@solana-program/address-lookup-table": "^0.11.0",
     "@solana-program/compute-budget": "^0.15.0",
     "@solana-program/system": "^0.12.0",
-    "@solana-program/token": "^0.12.0"
+    "@solana-program/token": "^0.12.0",
+    "@solana/transaction-messages": "^6.9.0"
   },
-
   "devDependencies": {
     "@solana/kit": "^6.5.0",
     "@types/node": "^22.0.0",

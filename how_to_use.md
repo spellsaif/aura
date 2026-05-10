@@ -1,53 +1,10 @@
-# Aura (`aura-sol`)
-![Aura Logo](https://i.ibb.co/Gvqt85jv/aura.png)
+# Aura (`aura-sol`) - How to Use
 
-Aura is a modern, lightweight, and professional-grade Solana TypeScript library designed to wrap the `@solana/kit` architecture with an ergonomic, fluent, and intuitive API. 
-
-It aims to bridge the gap between low-level instruction building and high-level developer experience, bringing the power of Web3.js v2 into a framework that "just works."
-
----
-
-## Why Aura? (Design Choices & Architecture)
-
-Solana's transition to `@solana/web3.js` v2 (`@solana/kit`) introduced a powerful, functional-first, and highly modular architecture. However, wiring together RPC transformers, instruction pipelines, signers, and blockhash lifetimes manually can result in heavy boilerplate.
-
-Aura makes **opinionated design choices** to maximize Developer Experience (DX) without sacrificing performance:
-
-1. **Fluent `TxBuilder` Pattern:** 
-   Transactions in Aura are built using an immutable builder pattern (`client.buildTx()`). Modifiers like `.withPriorityFee()` or `.withJitoTip()` return new instances, preventing state-mutation bugs and making code highly readable.
-2. **Auto-Simulation & Compute Optimization:** 
-   By default, Aura simulates every transaction locally before sending. It parses the simulation logs to extract the exact compute units consumed, applies a 10% safety buffer, and uses that for the final `ComputeBudget` instruction. This prevents frustrating `ComputeBudgetExceeded` errors.
-3. **No ATA Boilerplate:** 
-   Associated Token Accounts (ATAs) are notoriously tedious. Aura's token handlers (`transferToken`, `mintMore`) automatically resolve ATAs, and if a recipient doesn't have one, Aura injects the creation instruction inline.
-4. **V0 and ALT Native:**
-   Aura compiles transactions as Versioned Transactions (`v0`) by default, meaning Address Lookup Tables (ALTs) are supported out of the box via `.withAddressLookupTable()`. 
-5. **Jito MEV Integration:**
-   Aura bypasses the public mempool natively. Simply appending `.withJitoTip()` routes your transaction through the Jito Block Engine, preventing sandwich attacks and bypassing heavy network congestion.
-
----
-
-## Architecture Flow
-
-```mermaid
-graph TD
-    A[AuraClient] -->|buildTx| B(TxBuilder State)
-    B -->|withPriorityFee| C(Modified TxBuilder)
-    C -->|withJitoTip| D(Modified TxBuilder)
-    D -->|send| E{Simulate Tx}
-    E -->|Parses exact compute| F[Compile V0 Transaction]
-    F -->|Compress via ALTs| G[Fetch Latest Blockhash]
-    G -->|Sign| H{Is Jito Tip set?}
-    H -->|Yes| I[POST /api/v1/transactions Jito Block Engine]
-    H -->|No| J[Send to standard RPC]
-    I --> K((Confirmed))
-    J --> K((Confirmed))
-```
-
----
-
-# How to Use
+Aura is a modern Solana TypeScript library designed to wrap the `@solana/kit` and `@solana-program/*` packages with an ergonomic, fluent, and intuitive API. It simplifies everything from creating keypairs and managing tokens to building and simulating transactions, complete with modern features like Jito MEV protection and Address Lookup Tables (ALTs).
 
 Below are the core capabilities and examples of how to use Aura.
+
+---
 
 ## 1. Connecting to the Network
 
@@ -67,7 +24,7 @@ const customClient = connect("https://my-rpc.helius.xyz/api-key");
 
 ## 2. Managing Keypairs
 
-Aura makes it easy to generate, load, save, and export Solana keypairs securely.
+Aura makes it easy to generate, load, save, and export Solana keypairs.
 
 ```typescript
 import { 
@@ -116,7 +73,7 @@ const pda = await findPda(programId, ["my_seed", userAddressBytes]);
 
 ## 4. Fluent Transaction Builder (`TxBuilder`)
 
-Aura replaces complex transaction boilerplate with a fluent, immutable `TxBuilder`.
+Aura replaces complex transaction boilerplate with a fluent, immutable `TxBuilder`. It automatically handles fetching blockhashes, simulating transactions to find the exact compute unit limit, adding safety buffers, and sending to Jito.
 
 ```typescript
 import { transferSol } from 'aura-sol';
