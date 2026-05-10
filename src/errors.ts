@@ -207,6 +207,24 @@ export class KeypairLoadError extends InosukeError {
 }
 
 /**
+ * Thrown when a keypair can't be saved.
+ */
+export class KeypairSaveError extends InosukeError {
+  readonly path: string
+
+  constructor(path: string, cause?: unknown, options?: ErrorOptions) {
+    super(
+      "KEYPAIR_SAVE_FAILED",
+      `Could not save keypair to "${path}". ` +
+        `Make sure the directory is writable, and the key is extractable (use generateExtractableKey()).`,
+      { cause, ...options },
+    )
+    this.name = "KeypairSaveError"
+    this.path = path
+  }
+}
+
+/**
  * Type guard — narrows unknown to InosukeError.
  *
  * Why do we need this? In catch blocks, the error is typed as `unknown`

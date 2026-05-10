@@ -6,7 +6,7 @@ import {
   createSignerFromKeyPair,
 } from "@solana/kit"
 import type { KeyPairSigner } from "@solana/kit"
-import { KeypairLoadError } from "./errors.js"
+import { KeypairLoadError, KeypairSaveError } from "./errors.js"
 
 /**
  * Generate a new random keypair signer.
@@ -106,7 +106,7 @@ export async function saveKeyFile(
     await mkdir(dirname(resolvedPath), { recursive: true })
     await writeFile(resolvedPath, JSON.stringify(Array.from(combined)))
   } catch (cause) {
-    throw new KeypairLoadError(resolvedPath, cause)
+    throw new KeypairSaveError(resolvedPath, cause)
   }
 }
 

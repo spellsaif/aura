@@ -17,6 +17,8 @@
 
 
 export { connect, InosukeClient } from "./client.js"
+export { address } from "@solana/kit"
+export type { Address, KeyPairSigner, Signature, Instruction } from "@solana/kit"
 
 
 export { TxBuilder } from "./transaction.js"
@@ -70,6 +72,7 @@ export {
   ComputeExceededError,
   InvalidClusterError,
   KeypairLoadError,
+  KeypairSaveError,
   isInosukeError,
   hasErrorCode,
 } from "./errors.js"

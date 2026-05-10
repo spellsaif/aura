@@ -9,4 +9,11 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   external: ["@solana/kit"],
+  noExternal: [
+    "@solana-program/address-lookup-table",
+    "@solana-program/compute-budget",
+    "@solana-program/system",
+    "@solana-program/token",
+    "@solana/transaction-messages"
+  ],
 })
