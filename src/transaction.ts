@@ -16,11 +16,13 @@ import type {
   TransactionSigner,
   TransactionMessageWithBlockhashLifetime,
   Instruction,
+  Address,
 } from "@solana/kit"
 import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
 } from "@solana-program/compute-budget"
+import { getTransferSolInstruction } from "@solana-program/system"
 import { SimulationError, BlockhashExpiredError } from "./errors.js"
 import { parseSimulationLogs, sleep } from "./utils.js"
 import type { LatestBlockhash, SendOptions, SendResult } from "./types.js"
@@ -48,6 +50,8 @@ interface TxBuilderState {
   computeUnitLimit: number | undefined           
   computeUnitPrice: bigint | undefined           
   latestBlockhash: LatestBlockhash | undefined   
+  lookupTables: Address[]
+  jitoTip: bigint | undefined
   rpc: RpcConnection
   rpcSubscriptions: RpcSubscriptionsConnection
 }
@@ -137,6 +141,28 @@ export class TxBuilder {
    */
   withBlockhash(latestBlockhash: LatestBlockhash): TxBuilder {
     return new TxBuilder({ ...this.state, latestBlockhash })
+  }
+
+  /**
+   * Add an Address Lookup Table (ALT) to compress the transaction payload.
+   * This is required for complex transactions that exceed the 1232-byte limit.
+   */
+  withAddressLookupTable(address: Address): TxBuilder {
+    return new TxBuilder({
+      ...this.state,
+      lookupTables: [...this.state.lookupTables, address],
+    })
+  }
+
+  /**
+   * Add a Jito Tip to the transaction to bypass network congestion and protect against MEV.
+   * If this is set, the transaction is sent directly to the Jito Block Engine instead of public RPC.
+   * 
+   * @example
+   * client.buildTx({...}).withJitoTip(10_000n).send()
+   */
+  withJitoTip(microLamports: bigint): TxBuilder {
+    return new TxBuilder({ ...this.state, jitoTip: microLamports })
   }
 
   // Simulate
@@ -262,9 +288,43 @@ export class TxBuilder {
       const signature = getSignatureFromTransaction(signed)
 
       try {
-        // sendAndConfirmTransaction handles encoding, sending, and confirming
-        // It uses WebSocket subscriptions internally for efficient confirmation
-        await sendAndConfirmTransaction(signed, { commitment })
+        if (this.state.jitoTip !== undefined) {
+          const encodedTx = getBase64EncodedWireTransaction(signed);
+          const response = await fetch("https://mainnet.block-engine.jito.wtf/api/v1/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "sendTransaction",
+              params: [encodedTx, { encoding: "base64" }]
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Jito Bundle Error: ${await response.text()}`);
+          }
+          
+          // Poll for confirmation
+          let confirmed = false;
+          for (let i = 0; i < 30; i++) {
+             await sleep(1000);
+             const sigStatus = await rpc.getSignatureStatuses([signature]).send();
+             const status = sigStatus.value[0];
+             if (status) {
+               if (status.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`);
+               if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+                 confirmed = true;
+                 break;
+               }
+             }
+          }
+          if (!confirmed) throw new Error("Jito transaction timeout");
+        } else {
+          // sendAndConfirmTransaction handles encoding, sending, and confirming
+          // It uses WebSocket subscriptions internally for efficient confirmation
+          await sendAndConfirmTransaction(signed, { commitment })
+        }
 
         // Get the slot from the RPC after confirmation
         const sigStatus = await rpc
@@ -319,10 +379,10 @@ export class TxBuilder {
     blockhash: { blockhash: string; lastValidBlockHeight: bigint },
     computeUnitLimit: number | undefined,
   ) {
-    const { feePayer, instructions, computeUnitPrice } = this.state
+    const { feePayer, instructions, computeUnitPrice, lookupTables, rpc } = this.state
 
-    return pipe(
-      createTransactionMessage({ version: "legacy" }),
+    let message = pipe(
+      createTransactionMessage({ version: 0 }),
       (tx) => setTransactionMessageFeePayerSigner(feePayer, tx),
       (tx) =>
         setTransactionMessageLifetimeUsingBlockhash(
@@ -348,6 +408,46 @@ export class TxBuilder {
         return tx
       },
       (tx) => appendTransactionMessageInstructions(instructions, tx),
+      (tx) => {
+        if (this.state.jitoTip !== undefined) {
+          const JITO_TIP_ACCOUNTS = [
+            "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+            "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+            "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+            "ADaUMid9yfUytqMBgopwjb2DTLSokTYR2xAWhqq2eBfe",
+            "DfXygSm4jcyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjv",
+            "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwTc53",
+            "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeMgRwbb5Qz",
+            "FKrPkTwrBGPUUe6bQ4r7UqD9E8N8VwP6E2qL6Fk121y",
+          ] as Address[];
+          const randomTipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+          const tipIx = getTransferSolInstruction({
+            source: feePayer,
+            destination: randomTipAccount!,
+            amount: this.state.jitoTip,
+          });
+          return appendTransactionMessageInstruction(tipIx, tx);
+        }
+        return tx;
+      }
     )
+
+    if (lookupTables.length > 0) {
+      const { fetchAddressLookupTable } = await import("@solana-program/address-lookup-table")
+      const { compressTransactionMessageUsingAddressLookupTables } = await import("@solana/transaction-messages")
+      
+      const addressesByLookupTableAddress: Record<string, Address[]> = {}
+      for (const address of lookupTables) {
+        const { data: { addresses } } = await fetchAddressLookupTable(rpc as any, address)
+        addressesByLookupTableAddress[address] = addresses
+      }
+
+      message = compressTransactionMessageUsingAddressLookupTables(
+        message as any,
+        addressesByLookupTableAddress as any
+      ) as any
+    }
+
+    return message
   }
 }

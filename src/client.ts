@@ -120,6 +120,8 @@ export class AuraClient {
       computeUnitLimit: options.computeUnitLimit,   // may be undefined — that's fine now
       computeUnitPrice: options.computeUnitPrice,
       latestBlockhash: options.latestBlockhash,
+      lookupTables: [],
+      jitoTip: undefined,
       rpc: this.rpc,
       rpcSubscriptions: this.rpcSubscriptions,
     })
@@ -166,6 +168,71 @@ export class AuraClient {
       .getBalance(address, { commitment: "confirmed" })
       .send()
     return result.value
+  }
+
+  /**
+   * Get the token balance of a specific token account.
+   */
+  async getTokenBalance(tokenAccount: Address): Promise<bigint> {
+    const result = await this.rpc
+      .getTokenAccountBalance(tokenAccount, { commitment: "confirmed" })
+      .send()
+    return BigInt(result.value.amount)
+  }
+
+  /**
+   * Get the token balance of a wallet address for a specific mint.
+   * This automatically derives the ATA.
+   */
+  async getTokenBalanceByOwner(mint: Address, owner: Address): Promise<bigint> {
+    const { getAta } = await import("./token.js");
+    const ata = await getAta(mint, owner);
+    try {
+        return await this.getTokenBalance(ata);
+    } catch {
+        return 0n; // Return 0 if the ATA doesn't exist
+    }
+  }
+
+  /**
+   * Get supply and decimals for a mint.
+   */
+  async getMintInfo(mint: Address): Promise<{ supply: bigint; decimals: number }> {
+    const result = await this.rpc
+      .getTokenSupply(mint, { commitment: "confirmed" })
+      .send()
+    return {
+      supply: BigInt(result.value.amount),
+      decimals: result.value.decimals
+    }
+  }
+
+  /**
+   * Fetch Metaplex Token Metadata for a given mint (Name, Symbol, URI).
+   * This manually decodes the Metadata V1 account to avoid heavy dependencies.
+   */
+  async getTokenMetadata(mint: Address): Promise<{ name: string; symbol: string; uri: string } | null> {
+    const { findPda } = await import("./utils.js");
+    const { getAddressEncoder } = await import("@solana/kit");
+    
+    const metaplexProgramId = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s" as Address;
+    const pda = await findPda(metaplexProgramId, [
+      "metadata",
+      getAddressEncoder().encode(metaplexProgramId),
+      getAddressEncoder().encode(mint)
+    ]);
+
+    const account = await this.rpc.getAccountInfo(pda, { encoding: "base64" }).send();
+    if (!account.value) return null;
+
+    const data = Buffer.from(account.value.data[0], "base64");
+    
+    // Metadata V1 layout offsets
+    const name = data.subarray(69, 69 + 32).toString("utf8").replace(/\0/g, "").trim();
+    const symbol = data.subarray(105, 105 + 10).toString("utf8").replace(/\0/g, "").trim();
+    const uri = data.subarray(119, 119 + 200).toString("utf8").replace(/\0/g, "").trim();
+
+    return { name, symbol, uri };
   }
 
   /**
