@@ -1,5 +1,16 @@
-import type {Address, Signature} from "@solana/kit";
-import type {ClusterMoniker} from "./types.js"
+import { getProgramDerivedAddress } from "@solana/kit";
+import type {Address, Signature, ReadonlyUint8Array} from "@solana/kit";
+import type {ClusterMoniker, ClusterInput} from "./types.js"
+
+/**
+ * Helper to find a Program Derived Address (PDA).
+ * Seeds can be Uint8Array buffers or regular strings.
+ */
+export async function findPda(programId: Address, seeds: (Uint8Array | ReadonlyUint8Array | string)[]): Promise<Address> {
+  const parsedSeeds = seeds.map(s => typeof s === "string" ? new TextEncoder().encode(s) : s);
+  const [pda] = await getProgramDerivedAddress({ programAddress: programId, seeds: parsedSeeds });
+  return pda;
+}
 
 const LAMPORTS_PER_SOL = 1_000_000_000n;
 
@@ -19,11 +30,11 @@ export function toSol(lamports: bigint, decimals = 9): number {
  * Convert SOL to Lamports
  * 
  * @xample
- * toLamports(1) -> 1_000_000_000n
- * toLamports(0.5) -> 500_000_000n
+ * toLamport(1) -> 1_000_000_000n
+ * toLamport(0.5) -> 500_000_000n
  */
 
-export function toLamports(sol: number): bigint {
+export function toLamport(sol: number): bigint {
     return BigInt(Math.round(sol * Number(LAMPORTS_PER_SOL)));
 }
 
@@ -71,7 +82,7 @@ type ExplorerEntity = "tx" | "address" | "block";
 
 export function explorerUrl(
     value: Signature | Address | string,
-    cluster: ClusterMoniker | string = "mainnet",
+    cluster: ClusterInput = "mainnet",
     entity: ExplorerEntity = "tx"
 ): string {
     const base = `https://explorer.solana.com/${entity}/${value}`;
