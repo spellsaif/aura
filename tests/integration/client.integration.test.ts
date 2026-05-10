@@ -3,7 +3,7 @@ import { connect } from "../../src/client.js";
 import { InvalidClusterError } from "../../src/errors.js";
 import { generateKey } from "../../src/keypair.js";
 import { setupTest, isValidatorRunning } from "./setup.js";
-import { toLamports, toSol } from "../../src/utils.js";
+import { toLamport, toSol } from "../../src/utils.js";
 
 
 describe("connect() integration", () => {
@@ -52,11 +52,11 @@ describe("client.airdrop()", () => {
         const client = connect("localnet");
         const wallet = await generateKey();
 
-        await client.airdrop(wallet.address, toLamports(1));
+        await client.airdrop(wallet.address, toLamport(1));
 
         const balance = await client.balance(wallet.address);
 
-        expect(balance).toBe(toLamports(1));
+        expect(balance).toBe(toLamport(1));
     })
 
 })

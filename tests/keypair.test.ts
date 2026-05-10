@@ -60,7 +60,7 @@ describe("toBase58 and loadKey", () => {
   })
 
   it("toBase58 returns a different string than the address", async () => {
-    const signer = await generateKey()
+    const signer = await generateExtractableKey()
     const secret = await toBase58(signer)
 
     // The address is the PUBLIC key in base58
@@ -125,7 +125,7 @@ describe("keyFromBytes", () => {
 describe("saveKeyFile and loadKeyFile", () => {
   it("round-trips: save then load restores same address", async () => {
     // Generate a keypair
-    const original = await generateKey()
+    const original = await generateExtractableKey()
 
     // Save to a temp file
     const tmpPath = join(tmpdir(), `lamport-test-${Date.now()}.json`)
@@ -138,7 +138,7 @@ describe("saveKeyFile and loadKeyFile", () => {
   })
 
   it("creates parent directories if they don't exist", async () => {
-    const original = await generateKey()
+    const original = await generateExtractableKey()
 
     // Path with a non-existent subdirectory
     const tmpPath = join(

@@ -1,7 +1,7 @@
 import { KeyPairSigner } from "@solana/kit";
 import {AuraClient, connect} from "../../src/client.js";
 import {generateKey} from "../../src/keypair.js"
-import { toLamports } from "../../src/utils.js";
+import { toLamport } from "../../src/utils.js";
 
 export async function setupTest(): Promise<{
     client: AuraClient,
@@ -11,7 +11,7 @@ export async function setupTest(): Promise<{
 
     const payer = await generateKey();
 
-    await client.airdrop(payer.address, toLamports(2));
+    await client.airdrop(payer.address, toLamport(2));
 
     return {client, payer};
 }

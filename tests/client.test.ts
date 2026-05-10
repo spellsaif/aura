@@ -151,4 +151,27 @@ describe("TxBuilder modifiers", () => {
     expect(withLimit).toBeInstanceOf(TxBuilder)
     expect(withFee).not.toBe(withLimit)
   })
+
+  it("withJitoTip returns a new TxBuilder", async () => {
+    const client = connect("devnet")
+    const signer = await generateKey()
+
+    const original = client.buildTx({ feePayer: signer, instructions: [] })
+    const modified = original.withJitoTip(10_000n)
+
+    expect(modified).not.toBe(original)
+    expect(modified).toBeInstanceOf(TxBuilder)
+  })
+
+  it("withAddressLookupTable returns a new TxBuilder", async () => {
+    const { address } = await import("@solana/kit");
+    const client = connect("devnet")
+    const signer = await generateKey()
+
+    const original = client.buildTx({ feePayer: signer, instructions: [] })
+    const modified = original.withAddressLookupTable(address("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"))
+
+    expect(modified).not.toBe(original)
+    expect(modified).toBeInstanceOf(TxBuilder)
+  })
 })
