@@ -1,10 +1,10 @@
 import { KeyPairSigner } from "@solana/kit";
-import {AuraClient, connect} from "../../src/client.js";
+import {InosukeClient, connect} from "../../src/client.js";
 import {generateKey} from "../../src/keypair.js"
 import { toLamport } from "../../src/utils.js";
 
 export async function setupTest(): Promise<{
-    client: AuraClient,
+    client: InosukeClient,
     payer: KeyPairSigner
 }> {
     const client = connect("localnet");

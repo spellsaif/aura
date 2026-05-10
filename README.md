@@ -1,28 +1,28 @@
-# Aura (`aura-sol`)
-![Aura Logo](https://i.ibb.co/Gvqt85jv/aura.png)
+# Inosuke
+![Inosuke Logo](https://i.ibb.co/yFbWRMsn/inosuke.png)
 
-Aura is a modern, lightweight, and professional-grade Solana TypeScript library designed to wrap the `@solana/kit` architecture with an ergonomic, fluent, and intuitive API. 
+Inosuke is a modern, lightweight, and professional-grade Solana TypeScript library designed to wrap the `@solana/kit` architecture with an ergonomic, fluent, and intuitive API. 
 
 It aims to bridge the gap between low-level instruction building and high-level developer experience, bringing the power of Web3.js v2 into a framework that "just works."
 
 ---
 
-## Why Aura? (Design Choices & Architecture)
+## Why Inosuke? (Design Choices & Architecture)
 
 Solana's transition to `@solana/web3.js` v2 (`@solana/kit`) introduced a powerful, functional-first, and highly modular architecture. However, wiring together RPC transformers, instruction pipelines, signers, and blockhash lifetimes manually can result in heavy boilerplate.
 
-Aura makes **opinionated design choices** to maximize Developer Experience (DX) without sacrificing performance:
+Inosuke makes **opinionated design choices** to maximize Developer Experience (DX) without sacrificing performance:
 
 1. **Fluent `TxBuilder` Pattern:** 
-   Transactions in Aura are built using an immutable builder pattern (`client.buildTx()`). Modifiers like `.withPriorityFee()` or `.withJitoTip()` return new instances, preventing state-mutation bugs and making code highly readable.
+   Transactions in Inosuke are built using an immutable builder pattern (`client.buildTx()`). Modifiers like `.withPriorityFee()` or `.withJitoTip()` return new instances, preventing state-mutation bugs and making code highly readable.
 2. **Auto-Simulation & Compute Optimization:** 
-   By default, Aura simulates every transaction locally before sending. It parses the simulation logs to extract the exact compute units consumed, applies a 10% safety buffer, and uses that for the final `ComputeBudget` instruction. This prevents frustrating `ComputeBudgetExceeded` errors.
+   By default, Inosuke simulates every transaction locally before sending. It parses the simulation logs to extract the exact compute units consumed, applies a 10% safety buffer, and uses that for the final `ComputeBudget` instruction. This prevents frustrating `ComputeBudgetExceeded` errors.
 3. **No ATA Boilerplate:** 
-   Associated Token Accounts (ATAs) are notoriously tedious. Aura's token handlers (`transferToken`, `mintMore`) automatically resolve ATAs, and if a recipient doesn't have one, Aura injects the creation instruction inline.
+   Associated Token Accounts (ATAs) are notoriously tedious. Inosuke's token handlers (`transferToken`, `mintMore`) automatically resolve ATAs, and if a recipient doesn't have one, Inosuke injects the creation instruction inline.
 4. **V0 and ALT Native:**
-   Aura compiles transactions as Versioned Transactions (`v0`) by default, meaning Address Lookup Tables (ALTs) are supported out of the box via `.withAddressLookupTable()`. 
+   Inosuke compiles transactions as Versioned Transactions (`v0`) by default, meaning Address Lookup Tables (ALTs) are supported out of the box via `.withAddressLookupTable()`. 
 5. **Jito MEV Integration:**
-   Aura bypasses the public mempool natively. Simply appending `.withJitoTip()` routes your transaction through the Jito Block Engine, preventing sandwich attacks and bypassing heavy network congestion.
+   Inosuke bypasses the public mempool natively. Simply appending `.withJitoTip()` routes your transaction through the Jito Block Engine, preventing sandwich attacks and bypassing heavy network congestion.
 
 ---
 
@@ -30,7 +30,7 @@ Aura makes **opinionated design choices** to maximize Developer Experience (DX) 
 
 ```mermaid
 graph TD
-    A[AuraClient] -->|buildTx| B(TxBuilder State)
+    A[InosukeClient] -->|buildTx| B(TxBuilder State)
     B -->|withPriorityFee| C(Modified TxBuilder)
     C -->|withJitoTip| D(Modified TxBuilder)
     D -->|send| E{Simulate Tx}
@@ -47,14 +47,14 @@ graph TD
 
 # How to Use
 
-Below are the core capabilities and examples of how to use Aura.
+Below are the core capabilities and examples of how to use Inosuke.
 
 ## 1. Connecting to the Network
 
-Aura uses a centralized `AuraClient` via the `connect()` method to manage your RPC connections.
+Inosuke uses a centralized `InosukeClient` via the `connect()` method to manage your RPC connections.
 
 ```typescript
-import { connect } from 'aura-sol';
+import { connect } from 'inosuke';
 
 // Connect using monikers: "devnet", "testnet", "mainnet", or "localnet"
 const client = connect("mainnet");
@@ -67,7 +67,7 @@ const customClient = connect("https://my-rpc.helius.xyz/api-key");
 
 ## 2. Managing Keypairs
 
-Aura makes it easy to generate, load, save, and export Solana keypairs securely.
+Inosuke makes it easy to generate, load, save, and export Solana keypairs securely.
 
 ```typescript
 import { 
@@ -76,7 +76,7 @@ import {
   loadKeyFile, 
   saveKeyFile, 
   toBase58 
-} from 'aura-sol';
+} from 'inosuke';
 
 // Generate a highly secure, non-extractable key for signing
 const signer = await generateKey();
@@ -99,7 +99,7 @@ const secretKey = await toBase58(exportableSigner);
 You can easily query balances, request airdrops, find PDAs, and calculate rent.
 
 ```typescript
-import { toSol, toLamport, findPda } from 'aura-sol';
+import { toSol, toLamport, findPda } from 'inosuke';
 
 // Check SOL Balance
 const balanceLamports = await client.balance(signer.address);
@@ -116,10 +116,10 @@ const pda = await findPda(programId, ["my_seed", userAddressBytes]);
 
 ## 4. Fluent Transaction Builder (`TxBuilder`)
 
-Aura replaces complex transaction boilerplate with a fluent, immutable `TxBuilder`.
+Inosuke replaces complex transaction boilerplate with a fluent, immutable `TxBuilder`.
 
 ```typescript
-import { transferSol } from 'aura-sol';
+import { transferSol } from 'inosuke';
 
 // Generate a transfer instruction
 const { instructions } = await transferSol({
@@ -140,7 +140,7 @@ console.log("Transaction Confirmed! Signature:", result.signature);
 
 ### Advanced Routing: Jito & ALTs
 
-Aura natively supports **Versioned Transactions (v0)** and offers advanced routing.
+Inosuke natively supports **Versioned Transactions (v0)** and offers advanced routing.
 
 ```typescript
 // Compress your payload using Address Lookup Tables
@@ -156,7 +156,7 @@ await client.buildTx({ feePayer: signer, instructions: hugeDeFiSwap })
 
 ## 5. SPL Tokens (Minting, Transferring, Burning, Queries)
 
-Aura provides robust helpers for SPL tokens, completely abstracting away the hassle of Associated Token Accounts (ATAs).
+Inosuke provides robust helpers for SPL tokens, completely abstracting away the hassle of Associated Token Accounts (ATAs).
 
 ### Querying Token Data
 ```typescript
@@ -173,7 +173,7 @@ console.log(metadata.name, metadata.symbol, metadata.uri);
 
 ### Minting a new Token
 ```typescript
-import { mintToken, mintMore } from 'aura-sol';
+import { mintToken, mintMore } from 'inosuke';
 
 // Step 1: Create the mint
 const { instructions: createMintIxs, mint } = await mintToken({
@@ -184,7 +184,7 @@ const { instructions: createMintIxs, mint } = await mintToken({
 
 await client.buildTx({ feePayer: signer, instructions: createMintIxs }).send();
 
-// Step 2: Mint tokens to a wallet (Aura handles the ATA automatically!)
+// Step 2: Mint tokens to a wallet (Inosuke handles the ATA automatically!)
 const { instructions: mintIxs } = await mintMore({
   mint: mint.address,
   authority: signer,
@@ -197,10 +197,10 @@ await client.buildTx({ feePayer: signer, instructions: mintIxs }).send();
 
 ### Transferring Tokens
 ```typescript
-import { transferToken } from 'aura-sol';
+import { transferToken } from 'inosuke';
 
 // Transfer tokens to another wallet. 
-// If they don't have an ATA, Aura creates one inline!
+// If they don't have an ATA, Inosuke creates one inline!
 const { instructions } = await transferToken({
   mint: mint.address,
   from: signer,           // Sender (TransactionSigner)
@@ -215,7 +215,7 @@ await client.buildTx({ feePayer: signer, instructions }).send();
 
 ### Burning Tokens
 ```typescript
-import { burnToken } from 'aura-sol';
+import { burnToken } from 'inosuke';
 
 const { instructions } = await burnToken({
   mint: mint.address,

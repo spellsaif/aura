@@ -1,22 +1,22 @@
 
 /**
- * Every Aura erros extends this base class.
+ * Every Inosuke erros extends this base class.
  * 
  * @example
  * catch(e) {
- *      if(e instanceof AuraError) {
+ *      if(e instanceof InosukeError) {
  *          console.log(e.code) // SIMULATION FAILED 
  *  }
  * }
  */
 
-export class AuraError extends Error {
+export class InosukeError extends Error {
     readonly code: string;
 
     constructor(code: string, message: string, options?: ErrorOptions) {
         super(message, options);
 
-        this.name = "AuraError";
+        this.name = "InosukeError";
         this.code = code;
         
         if (Error.captureStackTrace) {
@@ -44,7 +44,7 @@ export class AuraError extends Error {
  *   }
  * }
  */
-export class SimulationError extends AuraError {
+export class SimulationError extends InosukeError {
   readonly logs: string[]
 
   constructor(message: string, logs: string[], options?: ErrorOptions) {
@@ -67,7 +67,7 @@ export class SimulationError extends AuraError {
  *   }
  * }
  */
-export class ConfirmationError extends AuraError {
+export class ConfirmationError extends InosukeError {
   readonly signature: string
 
   constructor(signature: string, options?: ErrorOptions) {
@@ -91,11 +91,11 @@ export class ConfirmationError extends AuraError {
  * - You built the tx and waited too long before sending
  * - All retries failed with expired blockhashes
  *
- * aura's .send() retries automatically on blockhash expiry.
+ * inosuke's .send() retries automatically on blockhash expiry.
  * This error only throws when ALL retries are exhausted.
  */
 
-export class BlockhashExpiredError extends AuraError {
+export class BlockhashExpiredError extends InosukeError {
   constructor(options?: ErrorOptions) {
     super(
       "BLOCKHASH_EXPIRED",
@@ -121,7 +121,7 @@ export class BlockhashExpiredError extends AuraError {
  *   }
  * }
  */
-export class InsufficientFundsError extends AuraError {
+export class InsufficientFundsError extends InosukeError {
   readonly required: bigint
   readonly available: bigint
 
@@ -141,11 +141,11 @@ export class InsufficientFundsError extends AuraError {
 /**
  * Thrown when a transaction exceeds its compute unit budget.
  *
- * aura auto-sets compute budgets via simulation, so this
+ * inosuke auto-sets compute budgets via simulation, so this
  * usually means the program took an unexpected code path that
  * uses more CUs than the simulated path did.
  */
-export class ComputeExceededError extends AuraError {
+export class ComputeExceededError extends InosukeError {
   readonly unitsUsed: number
   readonly unitsLimit: number
 
@@ -169,7 +169,7 @@ export class ComputeExceededError extends AuraError {
  * We store what the user provided so the error message
  * can show them exactly what was wrong.
  */
-export class InvalidClusterError extends AuraError {
+export class InvalidClusterError extends InosukeError {
   readonly provided: string
 
   constructor(provided: string, options?: ErrorOptions) {
@@ -191,7 +191,7 @@ export class InvalidClusterError extends AuraError {
  * We store the path so the error message tells you exactly
  * which file failed — not just "something went wrong."
  */
-export class KeypairLoadError extends AuraError {
+export class KeypairLoadError extends InosukeError {
   readonly path: string
 
   constructor(path: string, cause?: unknown, options?: ErrorOptions) {
@@ -207,24 +207,24 @@ export class KeypairLoadError extends AuraError {
 }
 
 /**
- * Type guard — narrows unknown to AuraError.
+ * Type guard — narrows unknown to InosukeError.
  *
  * Why do we need this? In catch blocks, the error is typed as `unknown`
  * in strict TypeScript. You can't access .code without narrowing first.
  *
  * @example
  * catch (e) {
- *   if (isAuraError(e)) {
- *     console.log(e.code) // TypeScript now knows e is AuraError
+ *   if (isInosukeError(e)) {
+ *     console.log(e.code) // TypeScript now knows e is InosukeError
  *   }
  * }
  */
-export function isAuraError(e: unknown): e is AuraError {
-  return e instanceof AuraError;
+export function isInosukeError(e: unknown): e is InosukeError {
+  return e instanceof InosukeError;
 }
 
 /**
- * Type guard — narrows unknown to a AuraError with a specific code.
+ * Type guard — narrows unknown to a InosukeError with a specific code.
  *
  * Use this when you want to handle one specific error type
  * without importing the error class itself.
@@ -239,6 +239,6 @@ export function isAuraError(e: unknown): e is AuraError {
 export function hasErrorCode(
   e: unknown,
   code: string,
-): e is AuraError & { code: typeof code } {
-  return isAuraError(e) && e.code === code
+): e is InosukeError & { code: typeof code } {
+  return isInosukeError(e) && e.code === code
 }

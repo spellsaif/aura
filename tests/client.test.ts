@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { connect, AuraClient } from "../src/client.js"
+import { connect, InosukeClient } from "../src/client.js"
 import { TxBuilder } from "../src/transaction.js"
 import { InvalidClusterError } from "../src/errors.js"
 import { generateKey } from "../src/keypair.js"
@@ -9,33 +9,33 @@ import { generateKey } from "../src/keypair.js"
 describe("connect", () => {
   it("accepts mainnet moniker", () => {
     const client = connect("mainnet")
-    expect(client).toBeInstanceOf(AuraClient)
+    expect(client).toBeInstanceOf(InosukeClient)
     expect(client.cluster).toBe("mainnet")
   })
 
   it("accepts devnet moniker", () => {
     const client = connect("devnet")
-    expect(client).toBeInstanceOf(AuraClient)
+    expect(client).toBeInstanceOf(InosukeClient)
   })
 
   it("accepts testnet moniker", () => {
     const client = connect("testnet")
-    expect(client).toBeInstanceOf(AuraClient)
+    expect(client).toBeInstanceOf(InosukeClient)
   })
 
   it("accepts localnet moniker", () => {
     const client = connect("localnet")
-    expect(client).toBeInstanceOf(AuraClient)
+    expect(client).toBeInstanceOf(InosukeClient)
   })
 
   it("accepts a full HTTPS URL", () => {
     const client = connect("https://api.devnet.solana.com")
-    expect(client).toBeInstanceOf(AuraClient)
+    expect(client).toBeInstanceOf(InosukeClient)
   })
 
   it("accepts a custom RPC URL", () => {
     const client = connect("https://my-rpc.helius.xyz/api-key")
-    expect(client).toBeInstanceOf(AuraClient)
+    expect(client).toBeInstanceOf(InosukeClient)
   })
 
   it("throws InvalidClusterError for bad moniker", () => {
@@ -63,7 +63,7 @@ describe("connect", () => {
   })
 })
 
-// ─── AuraClient ────────────────────────────────────────────────────────────
+// ─── InosukeClient ────────────────────────────────────────────────────────────
 
 describe("LamportClient", () => {
   it("exposes rpc and rpcSubscriptions", () => {

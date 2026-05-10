@@ -68,17 +68,17 @@ function resolveUrls(input: ClusterInput): {
   }
 }
 
-// AuraClient
+// InosukeClient
 
 /**
- * The main aura client. All operations start here.
- * Create one with connect() — not with new AuraClient().
+ * The main inosuke client. All operations start here.
+ * Create one with connect() — not with new InosukeClient().
  *
  * Why a class? Because the client holds shared state —
  * the rpc connection, the cluster URL — that all operations need.
  * A class bundles that state with the methods that use it.
  */
-export class AuraClient {
+export class InosukeClient {
   // Public so advanced users can drop down to raw kit if needed
   readonly rpc: ReturnType<typeof createSolanaRpc>
   readonly rpcSubscriptions: ReturnType<typeof createSolanaRpcSubscriptions>
@@ -282,7 +282,7 @@ export class AuraClient {
 // connect
 
 /**
- * Connect to a Solana cluster and return a AuraClient.
+ * Connect to a Solana cluster and return a InosukeClient.
  * This is the entry point for everything in lamport.
  *
  * @example
@@ -291,7 +291,7 @@ export class AuraClient {
  * const client = connect("localnet")
  * const client = connect("https://my-rpc.helius.xyz/api-key")
  */
-export function connect(cluster: ClusterInput): AuraClient {
+export function connect(cluster: ClusterInput): InosukeClient {
   if (!cluster) throw new InvalidClusterError(String(cluster))
 
   const { httpUrl, wsEndpoint } = resolveUrls(cluster)
@@ -302,5 +302,5 @@ export function connect(cluster: ClusterInput): AuraClient {
   // createSolanaRpcSubscriptions — WebSocket for confirmations
   const rpcSubscriptions = createSolanaRpcSubscriptions(wsEndpoint)
 
-  return new AuraClient(rpc, rpcSubscriptions, cluster)
+  return new InosukeClient(rpc, rpcSubscriptions, cluster)
 }

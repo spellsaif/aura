@@ -1,6 +1,6 @@
 {
-  "name": "aura-sol",
-  "version": "0.1.2",
+  "name": "inosuke",
+  "version": "0.0.1",
   "keywords": [
     "solana",
     "blockchain",
@@ -8,7 +8,7 @@
     "typescript",
     "spl-token",
     "transaction",
-    "aura"
+    "inosuke"
   ],
   "author": "nanasi saif.ali067@gmail.com",
   "license": "MIT",

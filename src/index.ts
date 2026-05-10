@@ -1,8 +1,8 @@
 /**
- * Aura — Solana TypeScript library
+ * Inosuke — Solana TypeScript library
  *
  * @example
- * import { connect, loadKeyFile, toSol, explorerUrl } from 'aura'
+ * import { connect, loadKeyFile, toSol, explorerUrl } from 'inosuke'
  *
  * const client = connect("devnet")
  * const signer = await loadKeyFile("~/.config/solana/id.json")
@@ -16,13 +16,14 @@
  */
 
 
-export { connect, AuraClient } from "./client.js"
+export { connect, InosukeClient } from "./client.js"
 
 
 export { TxBuilder } from "./transaction.js"
 
 export {
   generateKey,
+  generateExtractableKey,
   loadKey,
   loadKeyFile,
   saveKeyFile,
@@ -61,7 +62,7 @@ export {
 
 // Errors
 export {
-  AuraError,
+  InosukeError,
   SimulationError,
   ConfirmationError,
   BlockhashExpiredError,
@@ -69,7 +70,7 @@ export {
   ComputeExceededError,
   InvalidClusterError,
   KeypairLoadError,
-  isAuraError,
+  isInosukeError,
   hasErrorCode,
 } from "./errors.js"
 

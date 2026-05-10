@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
-  AuraError,
+  InosukeError,
   SimulationError,
   ConfirmationError,
   BlockhashExpiredError,
@@ -8,29 +8,29 @@ import {
   ComputeExceededError,
   InvalidClusterError,
   KeypairLoadError,
-  isAuraError,
+  isInosukeError,
   hasErrorCode,
 } from "../src/errors.js"
 
-describe("AuraError", () => {
+describe("InosukeError", () => {
   it("has correct name, code and message", () => {
-    const e = new AuraError("TEST_CODE", "test message")
-    expect(e.name).toBe("AuraError")
+    const e = new InosukeError("TEST_CODE", "test message")
+    expect(e.name).toBe("InosukeError")
     expect(e.code).toBe("TEST_CODE")
     expect(e.message).toBe("test message")
   })
 
   it("is an instance of Error", () => {
     // This matters — try/catch only catches Error instances in some environments
-    const e = new AuraError("X", "y")
+    const e = new InosukeError("X", "y")
     expect(e).toBeInstanceOf(Error)
-    expect(e).toBeInstanceOf(AuraError)
+    expect(e).toBeInstanceOf(InosukeError)
   })
 
   it("has a stack trace", () => {
-    const e = new AuraError("X", "y")
+    const e = new InosukeError("X", "y")
     expect(e.stack).toBeDefined()
-    expect(e.stack).toContain("AuraError")
+    expect(e.stack).toContain("InosukeError")
   })
 })
 
@@ -47,10 +47,10 @@ describe("SimulationError", () => {
     expect(e.logs).toEqual(logs)
   })
 
-  it("is instanceof AuraError", () => {
-    // Subclasses should be catchable as AuraError
+  it("is instanceof InosukeError", () => {
+    // Subclasses should be catchable as InosukeError
     const e = new SimulationError("failed", [])
-    expect(e).toBeInstanceOf(AuraError)
+    expect(e).toBeInstanceOf(InosukeError)
   })
 
   it("is instanceof SimulationError", () => {
@@ -165,27 +165,27 @@ describe("KeypairLoadError", () => {
 })
 
 
-describe("isAuraError", () => {
-  it("returns true for AuraError", () => {
-    expect(isAuraError(new AuraError("X", "y"))).toBe(true)
+describe("isInosukeError", () => {
+  it("returns true for InosukeError", () => {
+    expect(isInosukeError(new InosukeError("X", "y"))).toBe(true)
   })
 
   it("returns true for any subclass", () => {
-    expect(isAuraError(new SimulationError("x", []))).toBe(true)
-    expect(isAuraError(new BlockhashExpiredError())).toBe(true)
-    expect(isAuraError(new InvalidClusterError("x"))).toBe(true)
+    expect(isInosukeError(new SimulationError("x", []))).toBe(true)
+    expect(isInosukeError(new BlockhashExpiredError())).toBe(true)
+    expect(isInosukeError(new InvalidClusterError("x"))).toBe(true)
   })
 
   it("returns false for plain Error", () => {
-    expect(isAuraError(new Error("plain"))).toBe(false)
+    expect(isInosukeError(new Error("plain"))).toBe(false)
   })
 
   it("returns false for non-errors", () => {
-    expect(isAuraError("string")).toBe(false)
-    expect(isAuraError(null)).toBe(false)
-    expect(isAuraError(undefined)).toBe(false)
-    expect(isAuraError(42)).toBe(false)
-    expect(isAuraError({})).toBe(false)
+    expect(isInosukeError("string")).toBe(false)
+    expect(isInosukeError(null)).toBe(false)
+    expect(isInosukeError(undefined)).toBe(false)
+    expect(isInosukeError(42)).toBe(false)
+    expect(isInosukeError({})).toBe(false)
   })
 })
 
