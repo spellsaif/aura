@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.1 — Initial Release
+## 0.0.2 — Initial Release
 
 - **Transactions upgraded to V0**: Transactions are natively built with `version: 0`.
 - **Address Lookup Table (ALT) Support**: Added `.withAddressLookupTable(address)` modifier to `TxBuilder`.
