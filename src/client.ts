@@ -7,6 +7,7 @@ import {
 import type { Instruction, TransactionSigner, Address, Signature, RpcDevnet, SolanaRpcApiDevnet, RpcSubscriptionsDevnet, SolanaRpcSubscriptionsApi } from "@solana/kit"
 import { InvalidClusterError } from "./errors.js"
 import { TxBuilder } from "./transaction.js"
+import { IdlProgram } from "./idl.js"
 import { rpcUrl, wsUrl } from "./utils.js"
 import type {
   ClusterInput,
@@ -122,6 +123,9 @@ export class InosukeClient {
       latestBlockhash: options.latestBlockhash,
       lookupTables: [],
       jitoTip: undefined,
+      jitoEngine: undefined,
+      dynamicPriorityFeeLevel: undefined,
+      cluster: this.cluster,
       rpc: this.rpc,
       rpcSubscriptions: this.rpcSubscriptions,
     })
@@ -184,9 +188,9 @@ export class InosukeClient {
    * Get the token balance of a wallet address for a specific mint.
    * This automatically derives the ATA.
    */
-  async getTokenBalanceByOwner(mint: Address, owner: Address): Promise<bigint> {
+  async getTokenBalanceByOwner(mint: Address, owner: Address, tokenProgram?: Address): Promise<bigint> {
     const { getAta } = await import("./token.js");
-    const ata = await getAta(mint, owner);
+    const ata = await getAta(mint, owner, tokenProgram);
     try {
         return await this.getTokenBalance(ata);
     } catch {
@@ -213,7 +217,7 @@ export class InosukeClient {
    */
   async getTokenMetadata(mint: Address): Promise<{ name: string; symbol: string; uri: string } | null> {
     const { findPda } = await import("./utils.js");
-    const { getAddressEncoder } = await import("@solana/kit");
+    const { getAddressEncoder, getBase64Encoder } = await import("@solana/kit");
     
     const metaplexProgramId = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s" as Address;
     const pda = await findPda(metaplexProgramId, [
@@ -225,12 +229,13 @@ export class InosukeClient {
     const account = await this.rpc.getAccountInfo(pda, { encoding: "base64" }).send();
     if (!account.value) return null;
 
-    const data = Buffer.from(account.value.data[0], "base64");
+    const rawBytes = getBase64Encoder().encode(account.value.data[0]);
+    const textDecoder = new TextDecoder();
     
     // Metadata V1 layout offsets
-    const name = data.subarray(69, 69 + 32).toString("utf8").replace(/\0/g, "").trim();
-    const symbol = data.subarray(105, 105 + 10).toString("utf8").replace(/\0/g, "").trim();
-    const uri = data.subarray(119, 119 + 200).toString("utf8").replace(/\0/g, "").trim();
+    const name = textDecoder.decode(rawBytes.subarray(69, 69 + 32)).replace(/\0/g, "").trim();
+    const symbol = textDecoder.decode(rawBytes.subarray(105, 105 + 10)).replace(/\0/g, "").trim();
+    const uri = textDecoder.decode(rawBytes.subarray(119, 119 + 200)).replace(/\0/g, "").trim();
 
     return { name, symbol, uri };
   }
@@ -276,6 +281,18 @@ export class InosukeClient {
     commitment: "confirmed",
   })
 }
+
+  /**
+   * Load an Anchor IDL dynamically at runtime to create a typed program client.
+   * Enables dynamic transaction building without off-chain static code generation.
+   *
+   * @example
+   * const myProgram = client.loadProgram(programAddress, myAnchorIdl)
+   * const ix = await myProgram.instruction.initializeUser({ args, accounts })
+   */
+  loadProgram(address: Address, idl: any): IdlProgram {
+    return new IdlProgram(address, idl, this.rpc)
+  }
 
 }
 

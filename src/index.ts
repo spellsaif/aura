@@ -22,6 +22,8 @@ export type { Address, KeyPairSigner, Signature, Instruction } from "@solana/kit
 
 
 export { TxBuilder } from "./transaction.js"
+export { IdlProgram, getEncoderForIdlType, getDecoderForIdlType, getInstructionDiscriminator, getAccountDiscriminator } from "./idl.js"
+export type { IdlInstructionOptions } from "./idl.js"
 
 export {
   generateKey,
@@ -44,6 +46,7 @@ export {
   toUiAmount,
   MINT_SIZE,
   TOKEN_ACCOUNT_SIZE,
+  TOKEN_2022_PROGRAM_ADDRESS,
 } from "./token.js"
 
 // System

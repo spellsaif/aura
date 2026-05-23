@@ -52,12 +52,13 @@ export async function loadKey(base58SecretKey: string): Promise<KeyPairSigner> {
  * Only works in Node.js.
  */
 export async function loadKeyFile(path: string): Promise<KeyPairSigner> {
-  const resolvedPath = path.replace(
-    /^~/,
-    process.env["HOME"] ?? process.env["USERPROFILE"] ?? "~",
-  )
   try {
     const { readFile } = await import("node:fs/promises")
+    const { resolve, normalize } = await import("node:path")
+    const resolvedPath = resolve(normalize(path.replace(
+      /^~/,
+      (typeof process !== "undefined" ? (process.env["HOME"] ?? process.env["USERPROFILE"]) : undefined) ?? "~",
+    )))
     const raw = await readFile(resolvedPath, "utf-8")
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) {
@@ -69,7 +70,7 @@ export async function loadKeyFile(path: string): Promise<KeyPairSigner> {
     return await createKeyPairSignerFromBytes(bytes)
   } catch (e) {
     if (e instanceof KeypairLoadError) throw e
-    throw new KeypairLoadError(resolvedPath, e)
+    throw new KeypairLoadError(path, e)
   }
 }
 
@@ -83,13 +84,13 @@ export async function saveKeyFile(
   signer: KeyPairSigner,
   filePath: string,
 ): Promise<void> {
-  const resolvedPath = filePath.replace(
-    /^~/,
-    process.env["HOME"] ?? process.env["USERPROFILE"] ?? "~",
-  )
   try {
     const { writeFile, mkdir } = await import("node:fs/promises")
-    const { dirname } = await import("node:path")
+    const { resolve, normalize, dirname } = await import("node:path")
+    const resolvedPath = resolve(normalize(filePath.replace(
+      /^~/,
+      (typeof process !== "undefined" ? (process.env["HOME"] ?? process.env["USERPROFILE"]) : undefined) ?? "~",
+    )))
 
     // kit 6.x: Ed25519 private keys must be exported as pkcs8
     // The last 32 bytes of a pkcs8 export are the private key bytes
@@ -106,7 +107,7 @@ export async function saveKeyFile(
     await mkdir(dirname(resolvedPath), { recursive: true })
     await writeFile(resolvedPath, JSON.stringify(Array.from(combined)))
   } catch (cause) {
-    throw new KeypairSaveError(resolvedPath, cause)
+    throw new KeypairSaveError(filePath, cause)
   }
 }
 
