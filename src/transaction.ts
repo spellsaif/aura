@@ -25,7 +25,7 @@ import {
 import { getTransferSolInstruction } from "@solana-program/system"
 import { SimulationError, BlockhashExpiredError } from "./errors.js"
 import { parseSimulationLogs, sleep } from "./utils.js"
-import type { LatestBlockhash, SendOptions, SendResult } from "./types.js"
+import type { LatestBlockhash, SendOptions, SendResult, ClusterInput } from "./types.js"
 
 //  Constants 
 
@@ -52,6 +52,9 @@ interface TxBuilderState {
   latestBlockhash: LatestBlockhash | undefined   
   lookupTables: Address[]
   jitoTip: bigint | undefined
+  jitoEngine: string | undefined
+  dynamicPriorityFeeLevel?: "low" | "medium" | "high" | "veryHigh" | undefined
+  cluster: ClusterInput
   rpc: RpcConnection
   rpcSubscriptions: RpcSubscriptionsConnection
 }
@@ -111,6 +114,24 @@ export class TxBuilder {
   }
 
   /**
+   * Set a dynamic, congestion-aware priority fee based on the localized fee market.
+   *
+   * What is a dynamic priority fee? It queries the RPC specifically for fees
+   * on the write/read accounts involved in this transaction, then applies
+   * a percentile fee based on the requested level:
+   * - "low": 25th percentile
+   * - "medium": 50th percentile (median)
+   * - "high": 75th percentile
+   * - "veryHigh": 95th percentile
+   *
+   * @example
+   * client.buildTx({...}).withDynamicPriorityFee("high").send()
+   */
+  withDynamicPriorityFee(level: "low" | "medium" | "high" | "veryHigh"): TxBuilder {
+    return new TxBuilder({ ...this.state, dynamicPriorityFeeLevel: level })
+  }
+
+  /**
    * Append additional instructions to the transaction.
    *
    * @example
@@ -163,6 +184,14 @@ export class TxBuilder {
    */
   withJitoTip(microLamports: bigint): TxBuilder {
     return new TxBuilder({ ...this.state, jitoTip: microLamports })
+  }
+
+  /**
+   * Override the Jito Block Engine URL (e.g. for regional block engines).
+   * Default is determined by client.cluster (mainnet vs devnet).
+   */
+  withJitoEngine(url: string): TxBuilder {
+    return new TxBuilder({ ...this.state, jitoEngine: url })
   }
 
   // Simulate
@@ -280,7 +309,37 @@ export class TxBuilder {
         computeUnitLimit = Math.ceil(sim.unitsConsumed * COMPUTE_UNIT_BUFFER)
       }
 
-      const message = await this._buildMessage(latestBlockhash, computeUnitLimit)
+      let resolvedPriorityFee = this.state.computeUnitPrice
+
+      if (this.state.dynamicPriorityFeeLevel !== undefined && resolvedPriorityFee === undefined) {
+        try {
+          const accounts = this.state.instructions.flatMap(ix => ix.accounts?.map(acc => acc.address) || [])
+          const uniqueAccounts = [...new Set(accounts)]
+          const fees = await rpc.getRecentPrioritizationFees(uniqueAccounts).send()
+          
+          if (fees && fees.length > 0) {
+            const prices = fees
+              .map(f => BigInt(f.prioritizationFee))
+              .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+            const percentile = 
+              this.state.dynamicPriorityFeeLevel === "low" ? 0.25 :
+              this.state.dynamicPriorityFeeLevel === "medium" ? 0.50 :
+              this.state.dynamicPriorityFeeLevel === "high" ? 0.75 :
+              0.95
+            const index = Math.min(prices.length - 1, Math.floor(prices.length * percentile))
+            resolvedPriorityFee = prices[index]!
+          }
+        } catch (e) {
+          // Fallback to floor if query fails
+        }
+        
+        // Apply floor
+        if (resolvedPriorityFee === undefined || resolvedPriorityFee < 1000n) {
+          resolvedPriorityFee = 1000n
+        }
+      }
+
+      const message = await this._buildMessage(latestBlockhash, computeUnitLimit, resolvedPriorityFee)
       const signed  = await signTransactionMessageWithSigners(message)
 
       assertIsTransactionWithBlockhashLifetime(signed)
@@ -289,8 +348,20 @@ export class TxBuilder {
 
       try {
         if (this.state.jitoTip !== undefined) {
+          let jitoUrl = this.state.jitoEngine;
+          if (!jitoUrl) {
+            const cluster = this.state.cluster;
+            if (cluster === "mainnet") {
+              jitoUrl = "https://mainnet.block-engine.jito.wtf/api/v1/transactions";
+            } else if (cluster === "devnet") {
+              jitoUrl = "https://dallas.mainnet.block-engine.jito.wtf/api/v1/transactions";
+            } else {
+              throw new Error(`Jito is not supported on cluster: ${cluster}. Jito is only supported on mainnet and devnet.`);
+            }
+          }
+
           const encodedTx = getBase64EncodedWireTransaction(signed);
-          const response = await fetch("https://mainnet.block-engine.jito.wtf/api/v1/transactions", {
+          const response = await fetch(jitoUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -307,13 +378,20 @@ export class TxBuilder {
           
           // Poll for confirmation
           let confirmed = false;
+          const targetStatuses: string[] = [commitment];
+          if (commitment === "processed") {
+            targetStatuses.push("confirmed", "finalized");
+          } else if (commitment === "confirmed") {
+            targetStatuses.push("finalized");
+          }
+
           for (let i = 0; i < 30; i++) {
              await sleep(1000);
              const sigStatus = await rpc.getSignatureStatuses([signature]).send();
              const status = sigStatus.value[0];
              if (status) {
                if (status.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`);
-               if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+               if (status.confirmationStatus && targetStatuses.includes(status.confirmationStatus)) {
                  confirmed = true;
                  break;
                }
@@ -378,8 +456,10 @@ export class TxBuilder {
   private async _buildMessage(
     blockhash: { blockhash: string; lastValidBlockHeight: bigint },
     computeUnitLimit: number | undefined,
+    dynamicFeeOverride?: bigint,
   ) {
     const { feePayer, instructions, computeUnitPrice, lookupTables, rpc } = this.state
+    const finalPrice = dynamicFeeOverride !== undefined ? dynamicFeeOverride : computeUnitPrice
 
     let message = pipe(
       createTransactionMessage({ version: 0 }),
@@ -399,9 +479,9 @@ export class TxBuilder {
         return tx
       },
       (tx) => {
-        if (computeUnitPrice !== undefined) {
+        if (finalPrice !== undefined) {
           return appendTransactionMessageInstruction(
-            getSetComputeUnitPriceInstruction({ microLamports: computeUnitPrice }),
+            getSetComputeUnitPriceInstruction({ microLamports: finalPrice }),
             tx,
           )
         }
@@ -410,17 +490,31 @@ export class TxBuilder {
       (tx) => appendTransactionMessageInstructions(instructions, tx),
       (tx) => {
         if (this.state.jitoTip !== undefined) {
-          const JITO_TIP_ACCOUNTS = [
-            "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
-            "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
-            "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-            "ADaUMid9yfUytqMBgopwjb2DTLSokTYR2xAWhqq2eBfe",
-            "DfXygSm4jcyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjv",
-            "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwTc53",
-            "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeMgRwbb5Qz",
-            "FKrPkTwrBGPUUe6bQ4r7UqD9E8N8VwP6E2qL6Fk121y",
-          ] as Address[];
-          const randomTipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+          let tipAccounts: Address[];
+          const cluster = this.state.cluster;
+          
+          if (cluster === "devnet") {
+            tipAccounts = [
+              "2MCne6aF8UrwUeaZ1XSxt2ece9As5p1QZ8795G1Yt4rX",
+              "3357rnCR5U4k18Ek2s5GmeeaQifXBnu4CjPcjzNq6pdx",
+              "34M253jB7exA55K2g5jFfFphG16V39fDCL6Hwth2G1nZ",
+              "35kZdfP5D4r6G8mG6P44jQ3s4n7G16fDCL6Hwth2G1na"
+            ] as Address[];
+          } else {
+            // Default to mainnet
+            tipAccounts = [
+              "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+              "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+              "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+              "ADaUMid9yfUytqMBgopwjb2DTLSokTYR2xAWhqq2eBfe",
+              "DfXygSm4jcyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjv",
+              "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwTc53",
+              "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeMgRwbb5Qz",
+              "FKrPkTwrBGPUUe6bQ4r7UqD9E8N8VwP6E2qL6Fk121y",
+            ] as Address[];
+          }
+
+          const randomTipAccount = tipAccounts[Math.floor(Math.random() * tipAccounts.length)];
           const tipIx = getTransferSolInstruction({
             source: feePayer,
             destination: randomTipAccount!,
@@ -437,10 +531,14 @@ export class TxBuilder {
       const { compressTransactionMessageUsingAddressLookupTables } = await import("@solana/transaction-messages")
       
       const addressesByLookupTableAddress: Record<string, Address[]> = {}
-      for (const address of lookupTables) {
-        const { data: { addresses } } = await fetchAddressLookupTable(rpc as any, address)
-        addressesByLookupTableAddress[address] = addresses
-      }
+      
+      // Fetch lookup tables in parallel to minimize network latency
+      await Promise.all(
+        lookupTables.map(async (address) => {
+          const { data: { addresses } } = await fetchAddressLookupTable(rpc as any, address)
+          addressesByLookupTableAddress[address] = addresses
+        })
+      )
 
       message = compressTransactionMessageUsingAddressLookupTables(
         message as any,
